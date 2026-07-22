@@ -14,17 +14,18 @@ async function run() {
   await client.connect(transport);
   console.log("Connected");
 
-  const prompts = await client.listPrompts();
-  console.log("Prompts:", JSON.stringify(prompts, null, 2));
+  try {
+    const resources = await client.listResources();
+    console.log("Resources:", JSON.stringify(resources, null, 2));
 
-  if (prompts.prompts.length > 0) {
-    const promptName = prompts.prompts[0].name;
-    const promptDetails = await client.getPrompt({ name: promptName });
-    console.log(`Prompt details for ${promptName}:`, JSON.stringify(promptDetails, null, 2));
+    if (resources.resources.length > 0) {
+      const resourceUri = resources.resources[0].uri;
+      const resourceDetails = await client.readResource({ uri: resourceUri });
+      console.log(`Resource details for ${resourceUri}:`, JSON.stringify(resourceDetails, null, 2));
+    }
+  } catch (error) {
+    console.error("Error fetching resources:", error);
   }
-
-  const tools = await client.listTools();
-  console.log("Tools:", JSON.stringify(tools, null, 2));
 
   process.exit(0);
 }

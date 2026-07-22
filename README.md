@@ -11,20 +11,20 @@ This tool allows you to use Claude marketplaces for skills in **ANY agent** (spe
 You can run the server directly via `npx`:
 
 ```sh
-npx ecp-bridge <githubuser/repo | git url>
+npx ecp-bridge <githubuser/repo | git url> [plugin1,plugin2,...]
 ```
 
 Example:
 
 ```sh
-npx ecp-bridge ari-ayvazyan/AISkills
+npx ecp-bridge ari-ayvazyan/AISkills ecp-code-agent-skills
 ```
 
 The server operates over standard input/output (stdio), which is compatible with most MCP clients.
 
-### Private Repositories
+### Private Repository Marketplaces
 
-To access private repositories, you don't need to configure a token inside the application. Instead, provide a full Git URL that includes your authentication method:
+To access private repository marketplaces, you don't need to configure a token inside the application. Instead, provide a full Git URL that includes your authentication method:
 
 **Using a Personal Access Token (HTTPS):**
 
@@ -50,14 +50,15 @@ To use `ecp-bridge` in an MCP client (such as Claude Desktop or other compatible
       "args": [
         "-y",
         "ecp-bridge",
-        "ari-ayvazyan/AISkills"
+        "ari-ayvazyan/AISkills",
+        "ecp-code-agent-skills"
       ]
     }
   }
 }
 ```
 
-Replace `ari-ayvazyan/AISkills` with your desired GitHub repository or Git URL.
+Replace `ari-ayvazyan/AISkills` with your desired GitHub repository or Git URL. You can optionally add a comma-separated list of plugins as the last argument to load only specific skills. If this argument is omitted, the server will assume that all plugins should be served and will load all skills by default.
 
 ## Development
 

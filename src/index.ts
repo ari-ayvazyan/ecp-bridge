@@ -32,7 +32,7 @@ const server = new Server(
 
 let loadedSkills: Skill[] = [];
 
-async function parseRepo(repoUrl: string) {
+async function parseRepo(repoUrl: string, allowedPlugins?: string[]) {
   // Convert githubuser/repo to full URL if necessary
   if (!repoUrl.startsWith("http") && !repoUrl.startsWith("git@")) {
     repoUrl = `https://github.com/${repoUrl}.git`;
@@ -63,6 +63,11 @@ async function parseRepo(repoUrl: string) {
     // Process each plugin defined in marketplace.json
     if (marketplace.plugins && Array.isArray(marketplace.plugins)) {
       for (const plugin of marketplace.plugins) {
+        if (allowedPlugins && allowedPlugins.length > 0 && !allowedPlugins.includes(plugin.name)) {
+          console.error(`Skipping plugin ${plugin.name} as it is not in the allowed plugins list.`);
+          continue;
+        }
+
         const sourcePath = plugin.source || "";
         const skillsDir = path.join(tempDir, sourcePath, "skills");
 
@@ -172,12 +177,15 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error("Usage: mcp-skill-server <githubuser/repo | git url>");
+    console.error("Usage: mcp-skill-server <githubuser/repo | git url> [plugin1,plugin2,...]");
     process.exit(1);
   }
 
   const repoUrl = args[0];
-  await parseRepo(repoUrl);
+  const allowedPluginsStr = args[1];
+  const allowedPlugins = allowedPluginsStr ? allowedPluginsStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+
+  await parseRepo(repoUrl, allowedPlugins);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
