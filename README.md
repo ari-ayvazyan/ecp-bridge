@@ -38,6 +38,27 @@ npx ecp-bridge https://<YOUR_TOKEN>@github.com/someone/their-private-skills.git
 npx ecp-bridge git@github.com:someone/their-private-skills.git
 ```
 
+## MCP Client Configuration
+
+To use `ecp-bridge` in an MCP client (such as Claude Desktop or other compatible clients), add the following to your MCP configuration file:
+
+```json
+{
+  "mcpServers": {
+    "ecp-bridge": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "ecp-bridge",
+        "ari-ayvazyan/AISkills"
+      ]
+    }
+  }
+}
+```
+
+Replace `ari-ayvazyan/AISkills` with your desired GitHub repository or Git URL.
+
 ## Development
 
 Install dependencies:
