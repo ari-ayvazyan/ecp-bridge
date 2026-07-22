@@ -11,9 +11,10 @@ This tool allows you to use Claude marketplaces for skills in **ANY agent** (spe
 You can run the server directly via `npx`:
 
 ```sh
-npx ecp-bridge <githubuser/repo | git url> [plugin1,plugin2,...]
+npx ecp-bridge [--enable-resources] <githubuser/repo | git url> [plugin1,plugin2,...]
 ```
 
+By default, the server exposes skills as **MCP Tools** (agent-invokable) and **MCP Prompts** (user-invokable). If you need to expose skills as MCP Resources for compatibility with certain setups, pass the `--enable-resources` flag to host skills instead.
 Example:
 
 ```sh

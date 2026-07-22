@@ -5,6 +5,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import simpleGit from "simple-git";
 import * as os from "os";
@@ -16,24 +20,13 @@ interface Skill {
   name: string;
   description: string;
   content: string;
+  isTool: boolean;
+  isPrompt: boolean;
 }
-
-const server = new Server(
-  {
-    name: "ecp-bridge",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      resources: {},
-    },
-  }
-);
 
 let loadedSkills: Skill[] = [];
 
 async function parseRepo(repoUrl: string, allowedPlugins?: string[]) {
-  // Convert githubuser/repo to full URL if necessary
   if (!repoUrl.startsWith("http") && !repoUrl.startsWith("git@")) {
     repoUrl = `https://github.com/${repoUrl}.git`;
   }
@@ -54,13 +47,10 @@ async function parseRepo(repoUrl: string, allowedPlugins?: string[]) {
       console.error(`Found marketplace.json with ${marketplace.plugins?.length || 0} plugins.`);
     } catch (err) {
       console.error(`Could not read .claude-plugin/marketplace.json, proceeding to search for skills manually.`);
-      // If there's no marketplace.json, we could just search the entire repo for SKILL.md
-      // but the instructions imply "claude marketplace format" so let's stick to the structure
     }
 
     const skills: Skill[] = [];
 
-    // Process each plugin defined in marketplace.json
     if (marketplace.plugins && Array.isArray(marketplace.plugins)) {
       for (const plugin of marketplace.plugins) {
         if (allowedPlugins && allowedPlugins.length > 0 && !allowedPlugins.includes(plugin.name)) {
@@ -80,7 +70,6 @@ async function parseRepo(repoUrl: string, allowedPlugins?: string[]) {
                 const content = await fs.readFile(skillMdPath, "utf-8");
                 skills.push(parseSkillMd(content));
               } catch (err) {
-                // No SKILL.md in this directory, skip
               }
             }
           }
@@ -96,7 +85,6 @@ async function parseRepo(repoUrl: string, allowedPlugins?: string[]) {
     console.error(`Successfully loaded ${skills.length} skills.`);
 
   } finally {
-    // We keep the temp dir or clean it up? Better clean it up to avoid disk space leaks.
     try {
       await fs.rm(tempDir, { recursive: true, force: true });
     } catch (e) {
@@ -106,78 +94,52 @@ async function parseRepo(repoUrl: string, allowedPlugins?: string[]) {
 }
 
 function parseSkillMd(content: string): Skill {
-  // Typical frontmatter:
-  // ---
-  // name: my-skill
-  // description: A description
-  // ---
-  // content...
-
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (match) {
-    const [, frontmatterStr, body] = match;
+    const [, frontmatterStr] = match;
     try {
       const frontmatter = yaml.parse(frontmatterStr);
+      
+      let isTool = true;
+      if (frontmatter['disable-model-invocation'] === true || frontmatter['disable_model_invocation'] === true) {
+        isTool = false;
+      }
+      
+      let isPrompt = true;
+      if (frontmatter['user-invocable'] === false || frontmatter['user_invocable'] === false) {
+        isPrompt = false;
+      }
+
       return {
         name: frontmatter.name || "unknown-skill",
         description: frontmatter.description || "",
-        content: content.trim(), // Include the whole thing or just body? Usually the whole thing provides context, but maybe just body.
-        // Wait, standard practice is to include frontmatter so the model knows the name/description if it reads it as raw text.
-        // But body alone might be cleaner. Let's include the whole thing.
+        content: content.trim(),
+        isTool,
+        isPrompt,
       };
     } catch (e) {
       console.error("Failed to parse YAML frontmatter:", e);
     }
   }
 
-  // Fallback if no frontmatter
   return {
     name: "unnamed-skill-" + Math.random().toString(36).substring(7),
     description: "A skill without metadata",
     content: content.trim(),
+    isTool: true,
+    isPrompt: true,
   };
 }
 
-
-
-server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  return {
-    resources: loadedSkills.map(skill => ({
-      uri: `skill://${skill.name}`,
-      name: skill.name,
-      description: skill.description,
-      mimeType: "text/markdown",
-    })),
-  };
-});
-
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-  const uri = request.params.uri;
-  if (!uri.startsWith("skill://")) {
-    throw new Error(`Invalid resource URI: ${uri}`);
-  }
-  const name = uri.replace("skill://", "");
-  const skill = loadedSkills.find(s => s.name === name);
-
-  if (!skill) {
-    throw new Error(`Resource not found: ${uri}`);
-  }
-
-  return {
-    contents: [
-      {
-        uri,
-        mimeType: "text/markdown",
-        text: skill.content,
-      },
-    ],
-  };
-});
-
 async function main() {
-  const args = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  const flags = rawArgs.filter(arg => arg.startsWith('--'));
+  const args = rawArgs.filter(arg => !arg.startsWith('--'));
+
+  const enableResources = flags.includes('--enable-resources');
+
   if (args.length === 0) {
-    console.error("Usage: mcp-skill-server <githubuser/repo | git url> [plugin1,plugin2,...]");
+    console.error("Usage: mcp-skill-server [--enable-resources] <githubuser/repo | git url> [plugin1,plugin2,...]");
     process.exit(1);
   }
 
@@ -186,6 +148,125 @@ async function main() {
   const allowedPlugins = allowedPluginsStr ? allowedPluginsStr.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 
   await parseRepo(repoUrl, allowedPlugins);
+
+  const capabilities: any = {};
+
+  if (enableResources) {
+    capabilities.resources = {};
+  } else {
+    capabilities.tools = {};
+    capabilities.prompts = {};
+  }
+
+  const server = new Server(
+    {
+      name: "ecp-bridge",
+      version: "1.0.0",
+    },
+    {
+      capabilities,
+    }
+  );
+
+  if (enableResources) {
+    server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: loadedSkills.map(skill => ({
+          uri: `skill://${skill.name}`,
+          name: skill.name,
+          description: skill.description,
+          mimeType: "text/markdown",
+        })),
+      };
+    });
+
+    server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const uri = request.params.uri;
+      if (!uri.startsWith("skill://")) {
+        throw new Error(`Invalid resource URI: ${uri}`);
+      }
+      const name = uri.replace("skill://", "");
+      const skill = loadedSkills.find(s => s.name === name);
+
+      if (!skill) {
+        throw new Error(`Resource not found: ${uri}`);
+      }
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/markdown",
+            text: skill.content,
+          },
+        ],
+      };
+    });
+  }
+
+  if (!enableResources) {
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: loadedSkills.filter(s => s.isTool).map(skill => ({
+        name: skill.name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64),
+        description: skill.description || `Get instructions for ${skill.name}`,
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      })),
+    };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const toolName = request.params.name;
+    const skill = loadedSkills.filter(s => s.isTool).find(s => s.name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64) === toolName);
+
+    if (!skill) {
+      throw new Error(`Tool not found: ${toolName}`);
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: skill.content,
+        },
+      ],
+    };
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return {
+      prompts: loadedSkills.filter(s => s.isPrompt).map(skill => ({
+        name: skill.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        description: skill.description || `Apply the ${skill.name} skill`,
+      })),
+    };
+  });
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const promptName = request.params.name;
+    const skill = loadedSkills.filter(s => s.isPrompt).find(s => s.name.replace(/[^a-zA-Z0-9_-]/g, '_') === promptName);
+
+    if (!skill) {
+      throw new Error(`Prompt not found: ${promptName}`);
+    }
+
+    return {
+      description: skill.description,
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Please review and follow these instructions for the task:\n\n${skill.content}`,
+          },
+        },
+      ],
+    };
+  });
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
