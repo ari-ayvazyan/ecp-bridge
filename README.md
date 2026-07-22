@@ -1,8 +1,10 @@
 # ecp-bridge
 
-MCP Server bridging external GitHub repositories as skills for Model Context Protocol (MCP).
+MCP Server bridging external GitHub repositories as skills for the Model Context Protocol (MCP).
 
-This server allows you to load skills defined in a GitHub repository using the standard Claude marketplace format or standard `SKILL.md` structures, exposing them as resources to your MCP client.
+This tool allows you to use Claude marketplaces for skills in **ANY agent** (specifically Antigravity, OpenCode, etc.). Because the server fetches the repository on startup, your skills **AUTO-UPDATE** automatically whenever the GitHub repo updates!
+
+*This tool was created as part of [ecp-skillman](https://ecp-skillman.itdo.at) to manage & modify skills from different repos and use them anywhere with auto-updates.*
 
 ## Usage
 
@@ -15,10 +17,26 @@ npx ecp-bridge <githubuser/repo | git url>
 Example:
 
 ```sh
-npx ecp-bridge someone/their-mcp-skills
+npx ecp-bridge ari-ayvazyan/AISkills
 ```
 
 The server operates over standard input/output (stdio), which is compatible with most MCP clients.
+
+### Private Repositories
+
+To access private repositories, you don't need to configure a token inside the application. Instead, provide a full Git URL that includes your authentication method:
+
+**Using a Personal Access Token (HTTPS):**
+
+```sh
+npx ecp-bridge https://<YOUR_TOKEN>@github.com/someone/their-private-skills.git
+```
+
+**Using SSH (Requires local SSH keys to be configured):**
+
+```sh
+npx ecp-bridge git@github.com:someone/their-private-skills.git
+```
 
 ## Development
 
