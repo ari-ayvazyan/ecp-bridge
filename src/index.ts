@@ -239,15 +239,16 @@ async function main() {
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
     return {
       prompts: loadedSkills.filter(s => s.isPrompt).map(skill => ({
-        name: skill.name.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        name: skill.name.replace(/[^a-zA-Z0-9_-]/g, '_') + "-p",
         description: skill.description || `Apply the ${skill.name} skill`,
+        arguments: [],
       })),
     };
   });
 
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const promptName = request.params.name;
-    const skill = loadedSkills.filter(s => s.isPrompt).find(s => s.name.replace(/[^a-zA-Z0-9_-]/g, '_') === promptName);
+    const skill = loadedSkills.filter(s => s.isPrompt).find(s => (s.name.replace(/[^a-zA-Z0-9_-]/g, '_') + "-p") === promptName);
 
     if (!skill) {
       throw new Error(`Prompt not found: ${promptName}`);
